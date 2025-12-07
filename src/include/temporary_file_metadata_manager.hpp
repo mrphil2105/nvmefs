@@ -1,6 +1,9 @@
 #pragma once
 
 #include "duckdb.hpp"
+#include "duckdb/common/helper.hpp"
+#include "duckdb/common/unique_ptr.hpp"
+#include "lock_logger.hpp"
 #include "nvmefs_temporary_block_manager.hpp"
 #include <atomic>
 #include <boost/thread/shared_mutex.hpp> // sudo apt-get install libboost-all-dev
@@ -26,8 +29,9 @@ public:
 class TemporaryFileMetadataManager {
 public:
 	TemporaryFileMetadataManager(idx_t start_lba, idx_t end_lba, idx_t lba_size)
-	    : block_manager(make_uniq<NvmeTemporaryBlockManager>(start_lba, end_lba)), lba_size(lba_size),
-	      lba_amount(end_lba - start_lba) {
+	    : lba_size(lba_size), lba_amount(end_lba - start_lba),
+	      block_manager(make_uniq<NvmeTemporaryBlockManager>(start_lba, end_lba)),
+	      lock_logger(make_uniq<LockLogger>()) {
 	}
 
 	void CreateFile(const string &filename);
@@ -59,6 +63,7 @@ private:
 	idx_t lba_amount;
 	unique_ptr<NvmeTemporaryBlockManager> block_manager;
 	map<string, unique_ptr<TempFileMetadata>> file_to_temp_meta;
-	static boost::shared_mutex temp_mutex;
+	inline static boost::shared_mutex temp_mutex;
+	unique_ptr<LockLogger> lock_logger;
 };
 } // namespace duckdb
