@@ -194,21 +194,23 @@ void TemporaryFileMetadataManager::TruncateFile(const string &filename, idx_t ne
 void TemporaryFileMetadataManager::DeleteFile(const string &filename) {
 	boost::unique_lock<boost::shared_mutex> lock(temp_mutex);
 
-	//Use find()
+	//Use find() 
 	auto entry = file_to_temp_meta.find(filename);
     if (entry == file_to_temp_meta.end()) {
         return; // File already deleted, nothing to do
     }
-	TempFileMetadata *tfmeta = entry->second.get();
-	{
-		boost::unique_lock<boost::shared_mutex> file_lock(tfmeta->file_mutex);
-		for (const auto &kv : tfmeta->block_map) {
-			total_allocated_blocks.fetch_sub((tfmeta->block_size / lba_size), std::memory_order_relaxed);
-			block_manager->FreeBlock(kv.second);
-		}
-	}
+	// Since we delete file we are allowed extract ownership to local scope, and remove the entry
+	// Which allows us to release the unique lock earlier
+	unique_ptr<TempFileMetadata> local_tfmeta = std::move(entry->second);
+	file_to_temp_meta.erase(entry);
+	lock.unlock();
 
-	file_to_temp_meta.erase(entry); //Faster to erase using iterator
+	//No file_mutex is needed, as tfmeta is local now
+	for (const auto &kv : local_tfmeta->block_map) {
+		total_allocated_blocks.fetch_sub((local_tfmeta->block_size / lba_size), std::memory_order_relaxed);
+		block_manager->FreeBlock(kv.second);
+	}
+	
 }
 
 bool TemporaryFileMetadataManager::FileExists(const string &filename) {
@@ -241,18 +243,23 @@ idx_t TemporaryFileMetadataManager::GetFileSizeLBA(const string &filename) {
 void TemporaryFileMetadataManager::Clear() {
 	boost::unique_lock<boost::shared_mutex> alloc_lock(temp_mutex);
 
-	for (const auto &kv : file_to_temp_meta) {
+	//Extract global map into a local variable
+	map<string, unique_ptr<TempFileMetadata>> local_map;
+	file_to_temp_meta.swap(local_map);
+
+	total_allocated_blocks = 0;
+
+	alloc_lock.unlock();
+
+	// own local_Map exlusively so no locks needed
+	for (const auto &kv : local_map) {
 		TempFileMetadata *tfmeta = kv.second.get();
-		// Inner lock may be redundant since we hold the global unique lock
-		boost::unique_lock<boost::shared_mutex> file_lock(tfmeta->file_mutex);
 
 		for (const auto &block : tfmeta->block_map) {
 			block_manager->FreeBlock(block.second);
 		}
 	}
-
-	file_to_temp_meta.clear();
-	total_allocated_blocks = 0;
+	//Do I need to clear() local_map?
 }
 
 idx_t TemporaryFileMetadataManager::GetSeekBound(const string &filename) {
