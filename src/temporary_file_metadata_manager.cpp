@@ -20,8 +20,6 @@ inline idx_t GetBufferSize(const string buffer_size_string) {
 		return 229376;
 	} else if (!buffer_size_string.compare("DEFAULT")) {
 		return 262144;
-	} else if (!buffer_size_string.compare("block")) {
-		return 262144;
 	} else {
 		throw InvalidInputException("Unknown buffer size %s", buffer_size_string.c_str());
 	}
@@ -40,20 +38,15 @@ inline unique_ptr<TempFileMetadata> CreateTempFileMetadata(const string &filenam
 	std::string block_size_str = filename.substr(first_number_start, first_number_end - first_number_start);
 	idx_t block_size = GetBufferSize(block_size_str);
 
-	// Check if we encounter the expected buffer size strings
-	int file_index;
-	if (block_size_str == "block") {
-		file_index = 0;
-		
-	} else { // Resume parsing the file index
+	
 		// Find the position of the second number
-		size_t file_index_start = first_number_end + 1;               // Start after the '-'
-		size_t file_index_end = filename.find('.', file_index_start); // Find the '.' after the second number
+	size_t file_index_start = first_number_end + 1;               // Start after the '-'
+	size_t file_index_end = filename.find('.', file_index_start); // Find the '.' after the second number
 
-		// Extract the second number
-		std::string file_index_str = filename.substr(file_index_start, file_index_end - file_index_start);
-		file_index = std::stoi(file_index_str);
-	}
+	// Extract the second number
+	std::string file_index_str = filename.substr(file_index_start, file_index_end - file_index_start);
+	int file_index = std::stoi(file_index_str);
+	
 	tfmeta->block_size = block_size;
 	tfmeta->file_index = file_index;
 	tfmeta->nr_blocks = (1 << file_index) * 4000;
