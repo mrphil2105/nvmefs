@@ -103,12 +103,11 @@ idx_t TemporaryFileMetadataManager::GetLBA(const string &filename, idx_t locatio
 		throw IOException("Temporary file not found: " + filename);
 	}
 	TempFileMetadata *tfmeta = entry->second.get();
-	
+	idx_t block_index = location / tfmeta->block_size;
 
 	// Start by assuming the block exists
 	{
 		boost::shared_lock<boost::shared_mutex> file_read_lock(tfmeta->file_mutex);
-		idx_t block_index = location / tfmeta->block_size;
 
 		if (nr_lbas != (tfmeta->block_size / lba_size)) {
 			throw IOException("Temporary file block size mismatch");
@@ -124,7 +123,6 @@ idx_t TemporaryFileMetadataManager::GetLBA(const string &filename, idx_t locatio
 
 	// The block does not exist
 	boost::unique_lock<boost::shared_mutex> file_write_lock(tfmeta->file_mutex);
-	idx_t block_index = location / tfmeta->block_size;
 
 	if (!tfmeta->block_map.count(block_index)) {
 		TemporaryBlock *block = block_manager->AllocateBlock(nr_lbas);
@@ -275,9 +273,6 @@ idx_t TemporaryFileMetadataManager::GetSeekBound(const string &filename) {
 }
 
 idx_t TemporaryFileMetadataManager::GetAvailableSpace(idx_t lba_count, idx_t lba_start) {
-	//Use shared lock instead of unique lock, allowing others thread to create/delete/write files
-	boost::shared_lock<boost::shared_mutex> temp_lock(temp_mutex);
-
 	idx_t temp_max_bytes = ((lba_count - 1) - lba_start) * lba_size;
 	// Atomic read, instead of going through entire file_to_temp_meta
 	idx_t used_bytes = total_allocated_blocks.load() * lba_size;
