@@ -76,8 +76,6 @@ const TempFileMetadata *TemporaryFileMetadataManager::GetOrCreateFile(const stri
 		return it->second.get();
 	}
 
-	std::cout << "Creating file: " << filename << std::endl;
-
 	// Create a new TempFileMetadata object
 	unique_ptr<TempFileMetadata> tfmeta = CreateTempFileMetadata(filename);
 	auto [entry, is_new] = file_to_temp_meta.emplace(filename, std::move(tfmeta));
@@ -93,7 +91,6 @@ void TemporaryFileMetadataManager::CreateFile(const string &filename) {
 idx_t TemporaryFileMetadataManager::GetLBA(const string &filename, idx_t location, idx_t nr_lbas) {
 	// We are not adding any elements to the map, so acquire only a shared lock
 	boost::shared_lock<boost::shared_mutex> global_lock(temp_mutex);
-	std::cout << "GetLBA: " << filename << std::endl;
 
 	// Use find() instead unsafe operator[]
 	auto entry = file_to_temp_meta.find(filename);
@@ -192,8 +189,6 @@ void TemporaryFileMetadataManager::DeleteFile(const string &filename) {
 	// Acquire unique lock as we are removing an entry from the map
 	boost::unique_lock<boost::shared_mutex> lock(temp_mutex);
 
-	std::cout << "DeleteFile: " << filename << std::endl;
-
 	// Use find(), as the file might have been deleted while waiting
 	auto entry = file_to_temp_meta.find(filename);
 	if (entry == file_to_temp_meta.end()) {
@@ -228,8 +223,6 @@ bool TemporaryFileMetadataManager::FileExists(const string &filename) {
 
 idx_t TemporaryFileMetadataManager::GetFileSizeLBA(const string &filename) {
 	boost::shared_lock<boost::shared_mutex> lock(temp_mutex);
-
-	std::cout << "GetFileSizeLBA: " << filename << std::endl;
 
 	// Use find() for safety
 	auto entry = file_to_temp_meta.find(filename);

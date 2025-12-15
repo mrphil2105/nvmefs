@@ -308,6 +308,7 @@ void NvmeDevice::PrepareIOCmdContext(xnvme_cmd_ctx *ctx, const CmdContext &cmd_c
 }
 
 bool NvmeDevice::CheckFDP() {
+	return false;
 	// Create admin cmd to get feature
 	xnvme_cmd_ctx ctx = xnvme_cmd_ctx_from_dev(device);
 	uint32_t nsid = xnvme_dev_get_nsid(device);
