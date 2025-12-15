@@ -9,6 +9,8 @@
 #include "nvmefs_config.hpp"
 #include "temporary_file_metadata_manager.hpp"
 
+#include <mutex>
+
 namespace duckdb {
 
 constexpr idx_t NVMEFS_GLOBAL_METADATA_LOCATION = 0;
@@ -130,6 +132,9 @@ private:
 	atomic<idx_t> wal_location;
 	idx_t max_temp_size;
 	idx_t max_wal_size;
-	static std::recursive_mutex temp_lock;
+	inline static std::recursive_mutex temp_lock;
+	std::mutex metadata_lock; //Protects the initialization/publication of "metadata" and temp_meta_meanager
+	std::atomic<bool> metadata_initialized{false};
+	
 };
 } // namespace duckdb

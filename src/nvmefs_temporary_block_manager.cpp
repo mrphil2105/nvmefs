@@ -62,6 +62,8 @@ uint8_t NvmeTemporaryBlockManager::GetFreeListIndex(idx_t lba_amount) {
 }
 
 TemporaryBlock *NvmeTemporaryBlockManager::AllocateBlock(idx_t lba_amount) {
+	std::lock_guard<std::mutex> lock(block_mutex);
+
 	// auto start_time = std::chrono::high_resolution_clock::now();
 	// Get the free list index for the given size
 	uint8_t free_list_index = GetFreeListIndex(lba_amount);
@@ -150,7 +152,7 @@ TemporaryBlock *NvmeTemporaryBlockManager::SplitBlock(TemporaryBlock *block, idx
 }
 
 void NvmeTemporaryBlockManager::FreeBlock(TemporaryBlock *block) {
-
+	std::lock_guard<std::mutex> lock(block_mutex);
 	// auto start_time = std::chrono::high_resolution_clock::now();
 
 	// Mark the block as free

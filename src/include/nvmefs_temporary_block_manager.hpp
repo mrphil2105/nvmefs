@@ -1,6 +1,7 @@
 #pragma once
 
 #include "duckdb.hpp"
+#include <mutex>
 
 namespace duckdb {
 
@@ -69,6 +70,7 @@ private:
 
 	idx_t allocated_start_lba;
 	idx_t allocated_end_lba;
+	std::mutex block_mutex;
 };
 
 } // namespace duckdb

@@ -63,7 +63,7 @@ idx_t NvmeFileHandle::GetFilePointer() {
 
 ////////////////////////////////////////
 
-std::recursive_mutex NvmeFileSystem::temp_lock;
+// std::recursive_mutex NvmeFileSystem::temp_lock;
 
 NvmeFileSystem::NvmeFileSystem(NvmeConfig config)
     : allocator(Allocator::DefaultAllocator()),
@@ -419,19 +419,32 @@ bool NvmeFileSystem::Trim(FileHandle &handle, idx_t offset_bytes, idx_t length_b
 }
 
 bool NvmeFileSystem::TryLoadMetadata() {
-	if (metadata) {
+	if (metadata_initialized.load(std::memory_order_acquire)) {
 		return true;
 	}
 
+	// Serialize initialization, to ensure visiblity of metadata
+	std::lock_guard<std::mutex> lock(metadata_lock);
+
+	// Double check: did another thread intialize while waiting
+	if (metadata_initialized.load(std::memory_order_relaxed)) {
+		return true;
+	}
+
+
 	unique_ptr<GlobalMetadata> global = ReadMetadata();
 	if (global) {
-		metadata = std::move(global);
-		db_location.store(metadata->db_location);
-		wal_location.store(metadata->wal_location);
+		
+		db_location.store(global->db_location);
+		wal_location.store(global->wal_location);
 
 		DeviceGeometry geo = device->GetDeviceGeometry();
+
 		temp_meta_manager =
-		    make_uniq<TemporaryFileMetadataManager>(metadata->tmp_start, geo.lba_count - 1, geo.lba_size);
+		    make_uniq<TemporaryFileMetadataManager>(global->tmp_start, geo.lba_count - 1, geo.lba_size);
+		
+		metadata = std::move(global);
+		metadata_initialized.store(true, std::memory_order_release);
 		return true;
 	}
 
@@ -439,6 +452,14 @@ bool NvmeFileSystem::TryLoadMetadata() {
 }
 
 void NvmeFileSystem::InitializeMetadata(const string &filename) {
+
+	std::lock_guard<std::mutex> lock(metadata_lock);
+
+	// Ensure metadata is not already initialized, while waiting for lock
+	if (metadata_initialized.load(std::memory_order_relaxed)) {
+		return;
+	}
+
 	// We only support database paths/names up to 100 characters (this includes NVMEFS_PATH_PREFIX)
 	if (filename.length() > 100) {
 		throw IOException("Database name is too long.");
@@ -471,6 +492,7 @@ void NvmeFileSystem::InitializeMetadata(const string &filename) {
 	wal_location.store(wal_start);
 
 	metadata = std::move(global);
+	metadata_initialized.store(true, std::memory_order_release);
 }
 
 unique_ptr<GlobalMetadata> NvmeFileSystem::ReadMetadata() {
